@@ -42,18 +42,25 @@ class MainActivity : AppCompatActivity() {
         binding.swipeRefresh.setOnRefreshListener { binding.webView.reload() }
         binding.fabRefresh.setOnClickListener { binding.webView.reload() }
 
-        // 1. Extrair binário
+        // 1. Extrair binário (pode ser stub de 28 bytes se build falhou)
         try {
             updateLoading("Extraindo binário...", "Aguarde")
             opencodeBinary = BinaryManager.extractIfNeeded(this)
-            Log.i(TAG, "Binário pronto ${opencodeBinary!!.absolutePath} ${opencodeBinary!!.length()/1024/1024}MB")
+            val size = opencodeBinary!!.length()
+            Log.i(TAG, "Binário pronto ${opencodeBinary!!.absolutePath} ${size/1024}KB")
+            // Se for stub ( < 1KB ), não tenta iniciar servidor embutido — usa modo Termux
+            if (size < 1024) {
+                Log.w(TAG, "Binário stub detectado (size=$size), usando modo Termux")
+                showTermuxMode()
+                return
+            }
         } catch (e: Exception) {
             Log.e(TAG, "Falha extrair", e)
-            updateLoading("Falha ao extrair", e.message ?: "Verifique assets")
+            showTermuxMode()
             return
         }
 
-        // 2. Iniciar servidor desktop
+        // 2. Iniciar servidor desktop (se binário válido)
         startServer()
     }
 
@@ -186,6 +193,40 @@ class MainActivity : AppCompatActivity() {
         Thread { pollServerReady() }.start()
     }
 
+    private fun showTermuxMode() {
+        updateLoading("Modo Termux", "Inicie o servidor no Termux")
+        binding.loadingSub.text = "Abra o Termux e rode:\nopencode serve --port 4096 --hostname 127.0.0.1\n\nDepois arraste para atualizar"
+        binding.loadingView.setOnClickListener { checkAndLoad() }
+        binding.fabRefresh.visibility = View.VISIBLE
+        binding.fabRefresh.setOnClickListener { checkAndLoad() }
+        // Poll infinito: quando servidor aparecer (via Termux), carrega
+        Thread {
+            pollServerReadyInfinite()
+        }.start()
+        // Tenta carregar de 3 em 3s
+        binding.webView.postDelayed({ pollServerReadyInfinite() }, 3000)
+    }
+
+    private fun pollServerReadyInfinite() {
+        for (i in 1..999) {
+            try {
+                Thread.sleep(1500)
+                val url = URL(URL_DESKTOP)
+                val conn = url.openConnection() as HttpURLConnection
+                conn.connectTimeout = 1000
+                conn.readTimeout = 1000
+                conn.requestMethod = "GET"
+                val code = conn.responseCode
+                Log.i(TAG, "PollTermux $i -> $code")
+                if (code in 200..399) {
+                    runOnUiThread { loadDesktop() }
+                    return
+                }
+            } catch (e: Exception) { Log.d(TAG, "PollTermux $i fail ${e.message}") }
+            if (i % 5 == 0) runOnUiThread { binding.loadingSub.text = "Aguardando Termux... tentativa $i\nopencode serve --port 4096" }
+        }
+    }
+
     private fun pollServerReady() {
         // Tenta por 30s fazer GET em http://127.0.0.1:4096
         for (i in 1..30) {
@@ -207,8 +248,8 @@ class MainActivity : AppCompatActivity() {
             }
             runOnUiThread { updateLoading("Iniciando servidor Desktop...", "Tentativa $i/30") }
         }
-        // Se não conseguiu, tenta carregar mesmo assim (WebView vai retry)
-        runOnUiThread { loadDesktop() }
+        // Se não conseguiu após 30s, cai para modo Termux
+        runOnUiThread { showTermuxMode() }
     }
 
     private fun checkAndLoad() {
