@@ -77,6 +77,7 @@ class MainActivity : AppCompatActivity() {
         binding.webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
+            databaseEnabled = true
             allowFileAccess = true
             allowContentAccess = true
             allowFileAccessFromFileURLs = true
@@ -86,7 +87,18 @@ class MainActivity : AppCompatActivity() {
             builtInZoomControls = true
             displayZoomControls = false
             mixedContentMode = 0 // MIXED_CONTENT_ALWAYS_ALLOW
+            // Scroll fix: garante que WebView possa rolar em todas direções
+            setSupportZoom(true)
+            cacheMode = android.webkit.WebSettings.LOAD_DEFAULT
+            mediaPlaybackRequiresUserGesture = false
         }
+        // Habilita scroll vertical/horizontal
+        binding.webView.isVerticalScrollBarEnabled = true
+        binding.webView.isHorizontalScrollBarEnabled = true
+        binding.webView.overScrollMode = View.OVER_SCROLL_ALWAYS
+        binding.webView.isNestedScrollingEnabled = true
+        // WebChromeClient essencial para JS dialogs, file chooser e scroll
+        binding.webView.webChromeClient = android.webkit.WebChromeClient()
         binding.webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
                 super.onPageStarted(view, url, favicon)
