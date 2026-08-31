@@ -1,0 +1,9 @@
+app/src/main/assets/opencode
+app/src/main/assets/opencode-android-*
+.gradle/
+build/
+app/build/
+local.properties
+*.keystore
+.idea/
+*.iml
